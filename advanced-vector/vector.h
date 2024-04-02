@@ -291,26 +291,26 @@ inline T& Vector<T>::EmplaceBack(Args && ...args) {
     T* result = nullptr;
     if (size_ == Capacity()) {
         RawMemory<T> new_data(size_ == 0 ? 1 : size_ * 2);
-        result = new (new_data + size_) T(std::forward<Args>(args)...);
+        result = new (new_data.GetAddress() + size_) T(std::forward<Args>(args)...);
         if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
             std::uninitialized_move_n(data_.GetAddress(), size_, new_data.GetAddress());
-        }
-        else {
+        } else {
             try {
                 std::uninitialized_copy_n(data_.GetAddress(), size_, new_data.GetAddress());
-            }
-            catch (...) {
+            } catch (...) {
                 std::destroy_n(new_data.GetAddress() + size_, 1);
                 throw;
             }
         }
+
         std::destroy_n(data_.GetAddress(), size_);
         data_.Swap(new_data);
+    } else {
+        result = new (data_.GetAddress() + size_) T(std::forward<Args>(args)...);
     }
-    else {
-        result = new (data_ + size_) T(std::forward<Args>(args)...);
-    }
+
     ++size_;
+
     return *result;
 }
 
@@ -348,43 +348,57 @@ template<typename T>
 template<typename ...Args>
 typename Vector<T>::iterator Vector<T>::Emplace(const_iterator pos, Args && ...args) {
     assert(pos >= begin() && pos <= end());
+    size_t shift = static_cast<size_t>(pos - begin());
     iterator result = nullptr;
-    size_t shift = pos - begin();
+
     if (size_ == Capacity()) {
-        RawMemory<T> new_data(size_ == 0 ? 1 : size_ * 2);
-        result = new (new_data + shift) T(std::forward<Args>(args)...);
-        if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
-            std::uninitialized_move_n(begin(), shift, new_data.GetAddress());
-            std::uninitialized_move_n(begin() + shift, size_ - shift, new_data.GetAddress() + shift + 1);
-        }
-        else {
-            try {
-                std::uninitialized_copy_n(begin(), shift, new_data.GetAddress());
-                std::uninitialized_copy_n(begin() + shift, size_ - shift, new_data.GetAddress() + shift + 1);
-            }
-            catch (...) {
-                std::destroy_n(new_data.GetAddress() + shift, 1);
-                throw;
-            }
-        }
-        std::destroy_n(begin(), size_);
-        data_.Swap(new_data);
-    }
-    else {
-        if (size_ != 0) {
-            new (data_ + size_) T(std::move(*(end() - 1)));
-            try {
-                std::move_backward(begin() + shift, end(), end() + 1);
-            }
-            catch (...) {
-                std::destroy_n(end(), 1);
-                throw;
-            }
-            std::destroy_at(begin() + shift);
-        }
-        result = new (data_ + shift) T(std::forward<Args>(args)...);
+        result = EmplaceWithReallocation(shift, std::forward<Args>(args)...);
+    } else {
+        result = EmplaceWithoutReallocation(shift, std::forward<Args>(args)...);
     }
     ++size_;
+    return result;
+}
+
+template<typename T>
+template<typename ...Args>
+typename Vector<T>::iterator Vector<T>::EmplaceWithReallocation(size_t shift, Args && ...args) {
+    RawMemory<T> new_data(size_ == 0 ? 1 : size_ * 2);
+    iterator result = new (new_data + shift) T(std::forward<Args>(args)...);
+
+    if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+        std::uninitialized_move_n(begin(), shift, new_data.GetAddress());
+        std::uninitialized_move_n(begin() + shift, size_ - shift, new_data.GetAddress() + shift + 1);
+    } else {
+        try {
+            std::uninitialized_copy_n(begin(), shift, new_data.GetAddress());
+            std::uninitialized_copy_n(begin() + shift, size_ - shift, new_data.GetAddress() + shift + 1);
+        }
+        catch (...) {
+            std::destroy_n(new_data.GetAddress() + shift, 1);
+            throw;
+        }
+    }
+    std::destroy_n(begin(), size_);
+    data_.Swap(new_data);
+    return result;
+}
+
+template<typename T>
+template<typename ...Args>
+typename Vector<T>::iterator Vector<T>::EmplaceWithoutReallocation(size_t shift, Args && ...args) {
+    if (size_ != 0) {
+        new (data_ + size_) T(std::move(*(end() - 1));
+        try {
+            std::move_backward(begin() + shift, end(), end() + 1);
+        }
+        catch (...) {
+            std::destroy_n(end(), 1);
+            throw;
+        }
+        std::destroy_at(begin() + shift);
+    }
+    iterator result = new (data_ + shift) T(std::forward<Args>(args)...);
     return result;
 }
 
