@@ -287,32 +287,8 @@ inline void Vector<T>::PopBack() {
 template<typename T>
 template<typename ...Args>
 inline T& Vector<T>::EmplaceBack(Args && ...args) {
-    T* result = nullptr;
-    if (size_ == Capacity()) {
-        RawMemory<T> new_data(size_ == 0 ? 1 : size_ * 2);
-        result = new (new_data.GetAddress() + size_) T(std::forward<Args>(args)...);
-        if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
-            std::uninitialized_move_n(data_.GetAddress(), size_, new_data.GetAddress());
-        } else {
-            try {
-                std::uninitialized_copy_n(data_.GetAddress(), size_, new_data.GetAddress());
-            } catch (...) {
-                std::destroy_n(new_data.GetAddress() + size_, 1);
-                throw;
-            }
-        }
-
-        std::destroy_n(data_.GetAddress(), size_);
-        data_.Swap(new_data);
-    } else {
-        result = new (data_.GetAddress() + size_) T(std::forward<Args>(args)...);
-    }
-
-    ++size_;
-
-    return *result;
+    return *Emplace(end(), std::forward<Args>(args)...);
 }
-
 template<typename T>
 typename Vector<T>::iterator Vector<T>::begin() noexcept {
     return data_.GetAddress();
