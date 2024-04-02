@@ -181,7 +181,6 @@ template<typename T>
 inline Vector<T>& Vector<T>::operator=(const Vector& rhs) {
     if (this != &rhs) {
         if (rhs.size_ > data_.Capacity()) {
-            /* Применить copy-and-swap */
             Vector rhs_copy(rhs);
             Swap(rhs_copy);
         } else {
